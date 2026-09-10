@@ -28,3 +28,7 @@ export const formatFileSize = (bytes: number): string => {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
+
+export function isNetworkError(message: string): boolean {
+  return message.includes('Failed to fetch') || message.includes('NetworkError');
+}

@@ -102,7 +102,7 @@ export interface EmbeddingConfig {
   readonly provider: string;
   readonly base_url: string | null;
   readonly model_name: string;
-  readonly embedding_dimensions: number;
+  readonly embedding_dimensions?: number | null;
   readonly locked: boolean;
 }
 
@@ -111,7 +111,7 @@ export interface EmbeddingConfigSavePayload {
   readonly api_key?: string;
   readonly base_url?: string;
   readonly model_name: string;
-  readonly embedding_dimensions: number;
+  readonly embedding_dimensions?: number | null;
 }
 
 export type EnrichmentPreset = 'off' | 'standard' | 'high' | 'full';

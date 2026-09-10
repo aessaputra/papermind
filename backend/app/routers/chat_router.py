@@ -1,9 +1,11 @@
+import json
 import logging
 from collections.abc import AsyncIterable
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.sse import EventSourceResponse, ServerSentEvent
+from pydantic import ValidationError
 
 from app.auth import CurrentUserDep
 from app.database import execute_query, get_supabase_client
@@ -29,7 +31,6 @@ def parse_citations(citations_raw: Any) -> list[Citation]:
         return []
     if isinstance(citations_raw, str):
         try:
-            import json
             citations_raw = json.loads(citations_raw)
         except Exception as e:
             logger.debug("Failed to parse citations JSON: %s", e)
@@ -39,14 +40,8 @@ def parse_citations(citations_raw: Any) -> list[Citation]:
         for item in citations_raw:
             if isinstance(item, dict):
                 try:
-                    parsed.append(
-                        Citation(
-                            filename=str(item.get("filename", "Doc")),
-                            page_number=int(item.get("page_number", 1)),
-                            content=str(item.get("content", "")),
-                        )
-                    )
-                except Exception as e:
+                    parsed.append(Citation.model_validate(item))
+                except ValidationError as e:
                     logger.debug("Skipped invalid citation: %s", e)
         return parsed
     return []
@@ -189,4 +184,12 @@ async def list_session_messages(
 @router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_chat_session(session_id: str, user: CurrentUserDep) -> None:
     supabase = await get_supabase_client()
+    existing = await execute_query(
+        supabase.table("chat_sessions").select("id").eq("id", session_id).eq("user_id", user.user_id)
+    )
+    if not existing.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chat session not found."
+        )
     await execute_query(supabase.table("chat_sessions").delete().eq("id", session_id).eq("user_id", user.user_id))

@@ -115,6 +115,11 @@ export function ChatProvider({ children }: { readonly children: React.ReactNode 
     setIsStreaming(true);
 
     let accumulatedTokens = '';
+    let rafId = 0;
+    const flushTokens = () => {
+      rafId = 0;
+      updateAssistantMessage(assistantId, { content: accumulatedTokens });
+    };
 
     const activeDocIds = activeDocuments.map((d) => d.id);
 
@@ -131,13 +136,15 @@ export function ChatProvider({ children }: { readonly children: React.ReactNode 
         onCitations: (citations) => updateAssistantMessage(assistantId, { citations }),
         onToken: (tokenText) => {
           accumulatedTokens += tokenText;
-          updateAssistantMessage(assistantId, { content: accumulatedTokens });
+          if (!rafId) rafId = requestAnimationFrame(flushTokens);
         },
         onComplete: () => {
+          if (rafId) { cancelAnimationFrame(rafId); flushTokens(); }
           setIsStreaming(false);
           reloadSessions(token);
         },
         onError: (errorMsg) => {
+          if (rafId) cancelAnimationFrame(rafId);
           updateAssistantMessage(assistantId, { content: `Error: ${errorMsg}` });
           setIsStreaming(false);
         },

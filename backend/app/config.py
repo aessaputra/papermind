@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     LANGSMITH_ENDPOINT: str | None = Field(None, alias="LANGSMITH_ENDPOINT")
     LANGSMITH_PROJECT: str = Field("Paper Mind", alias="LANGSMITH_PROJECT")
 
+    MAX_UPLOAD_MB: int = Field(50, alias="MAX_UPLOAD_MB")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

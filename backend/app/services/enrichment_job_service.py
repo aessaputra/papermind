@@ -1,6 +1,6 @@
 import logging
 import math
-import re
+import uuid
 from typing import Any
 
 from tenacity import (
@@ -11,7 +11,7 @@ from tenacity import (
 )
 
 from app.database import execute_query, get_supabase_client
-from app.exceptions import get_retryable_exceptions
+from app.exceptions import RETRYABLE_EXCEPTIONS
 from app.schemas import DocumentChunkDTO
 
 logger = logging.getLogger(__name__)
@@ -25,29 +25,37 @@ PRESET_CAPS = {
 
 DEFAULT_PRESET = "standard"
 MIN_PARAGRAPH_LENGTH = 20
-UUID_PATTERN = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
-)
+
+
+def _validate_uuid(value: str, field_name: str) -> None:
+    try:
+        uuid.UUID(str(value))
+    except (ValueError, AttributeError, TypeError):
+        raise ValueError(f"{field_name} must be a valid UUID")
+
+
+def get_preset_cap(preset: str) -> int:
+    return PRESET_CAPS.get(preset, PRESET_CAPS["standard"])
+
+
+def cosine_similarity(v1: list[float], v2: list[float]) -> float:
+    dot_product = sum(a * b for a, b in zip(v1, v2))
+    norm_v1 = math.sqrt(sum(a * a for a in v1))
+    norm_v2 = math.sqrt(sum(b * b for b in v2))
+    if norm_v1 == 0 or norm_v2 == 0:
+        return 0.0
+    return dot_product / (norm_v1 * norm_v2)
 
 
 class EnrichmentJobService:
-    @staticmethod
-    def _validate_uuid(value: str, field_name: str) -> None:
-        if not value or not isinstance(value, str):
-            raise ValueError(f"{field_name} must be a non-empty string")
-        if not UUID_PATTERN.match(value):
-            raise ValueError(f"{field_name} must be a valid UUID")
-
-    def get_preset_cap(self, preset: str) -> int:
-        return PRESET_CAPS.get(preset, PRESET_CAPS["standard"])
 
     @retry(
-        retry=retry_if_exception_type(get_retryable_exceptions()),
+        retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
         wait=wait_exponential(multiplier=1, min=2, max=30),
         stop=stop_after_attempt(3),
     )
     async def get_user_preset(self, user_id: str) -> str:
-        self._validate_uuid(user_id, "user_id")
+        _validate_uuid(user_id, "user_id")
 
         try:
             supabase = await get_supabase_client()
@@ -70,7 +78,7 @@ class EnrichmentJobService:
             return DEFAULT_PRESET
 
     @retry(
-        retry=retry_if_exception_type(get_retryable_exceptions()),
+        retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
         wait=wait_exponential(multiplier=1, min=2, max=30),
         stop=stop_after_attempt(3),
     )
@@ -80,8 +88,8 @@ class EnrichmentJobService:
         user_id: str,
         total_paragraphs: int,
     ) -> dict[str, Any]:
-        self._validate_uuid(document_id, "document_id")
-        self._validate_uuid(user_id, "user_id")
+        _validate_uuid(document_id, "document_id")
+        _validate_uuid(user_id, "user_id")
 
         if total_paragraphs < 0:
             raise ValueError("total_paragraphs must be non-negative")
@@ -91,12 +99,7 @@ class EnrichmentJobService:
             job_data: dict[str, Any] = {
                 "document_id": document_id,
                 "user_id": user_id,
-                "status": "pending",
                 "total_paragraphs": total_paragraphs,
-                "processed_paragraphs": 0,
-                "question_chunks_created": 0,
-                "failed_paragraphs": 0,
-                "attempt_count": 0,
             }
 
             result = await execute_query(
@@ -119,12 +122,12 @@ class EnrichmentJobService:
             raise
 
     @retry(
-        retry=retry_if_exception_type(get_retryable_exceptions()),
+        retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
         wait=wait_exponential(multiplier=1, min=2, max=30),
         stop=stop_after_attempt(3),
     )
     async def get_job(self, document_id: str) -> dict[str, Any] | None:
-        self._validate_uuid(document_id, "document_id")
+        _validate_uuid(document_id, "document_id")
 
         try:
             supabase = await get_supabase_client()
@@ -145,13 +148,13 @@ class EnrichmentJobService:
             raise
 
     @retry(
-        retry=retry_if_exception_type(get_retryable_exceptions()),
+        retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
         wait=wait_exponential(multiplier=1, min=2, max=30),
         stop=stop_after_attempt(3),
     )
     async def start_job(self, document_id: str, user_id: str) -> None:
-        self._validate_uuid(document_id, "document_id")
-        self._validate_uuid(user_id, "user_id")
+        _validate_uuid(document_id, "document_id")
+        _validate_uuid(user_id, "user_id")
 
         try:
             supabase = await get_supabase_client()
@@ -172,7 +175,7 @@ class EnrichmentJobService:
             raise
 
     @retry(
-        retry=retry_if_exception_type(get_retryable_exceptions()),
+        retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
         wait=wait_exponential(multiplier=1, min=2, max=30),
         stop=stop_after_attempt(3),
     )
@@ -183,8 +186,8 @@ class EnrichmentJobService:
         processed_paragraphs: int,
         question_chunks_created: int,
     ) -> None:
-        self._validate_uuid(document_id, "document_id")
-        self._validate_uuid(user_id, "user_id")
+        _validate_uuid(document_id, "document_id")
+        _validate_uuid(user_id, "user_id")
 
         if processed_paragraphs < 0:
             raise ValueError("processed_paragraphs must be non-negative")
@@ -219,7 +222,7 @@ class EnrichmentJobService:
             )
 
     @retry(
-        retry=retry_if_exception_type(get_retryable_exceptions()),
+        retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
         wait=wait_exponential(multiplier=1, min=2, max=30),
         stop=stop_after_attempt(3),
     )
@@ -230,8 +233,8 @@ class EnrichmentJobService:
         processed_paragraphs: int,
         question_chunks_created: int,
     ) -> None:
-        self._validate_uuid(document_id, "document_id")
-        self._validate_uuid(user_id, "user_id")
+        _validate_uuid(document_id, "document_id")
+        _validate_uuid(user_id, "user_id")
 
         if processed_paragraphs < 0:
             raise ValueError("processed_paragraphs must be non-negative")
@@ -265,75 +268,6 @@ class EnrichmentJobService:
             )
             raise
 
-    @retry(
-        retry=retry_if_exception_type(get_retryable_exceptions()),
-        wait=wait_exponential(multiplier=1, min=2, max=30),
-        stop=stop_after_attempt(3),
-    )
-    async def fail_job(
-        self,
-        document_id: str,
-        user_id: str,
-        error_message: str,
-        failed_paragraphs: int = 0,
-    ) -> None:
-        self._validate_uuid(document_id, "document_id")
-        self._validate_uuid(user_id, "user_id")
-
-        if failed_paragraphs < 0:
-            raise ValueError("failed_paragraphs must be non-negative")
-
-        try:
-            supabase = await get_supabase_client()
-            await execute_query(
-                supabase.table("document_enrichment_jobs")
-                .update(
-                    {
-                        "status": "failed",
-                        "last_error": error_message[:500],
-                        "failed_paragraphs": failed_paragraphs,
-                    }
-                )
-                .eq("document_id", document_id)
-                .eq("user_id", user_id)
-            )
-
-            logger.error(
-                "Marked enrichment job as failed for document %s: %s",
-                document_id,
-                error_message,
-            )
-
-        except Exception as exc:
-            logger.error(
-                "Failed to mark enrichment job as failed for document %s: %s",
-                document_id,
-                exc,
-            )
-
-    @retry(
-        retry=retry_if_exception_type(get_retryable_exceptions()),
-        wait=wait_exponential(multiplier=1, min=2, max=30),
-        stop=stop_after_attempt(3),
-    )
-    async def get_retryable_jobs(self) -> list[dict[str, Any]]:
-        try:
-            supabase = await get_supabase_client()
-            result = await execute_query(
-                supabase.table("document_enrichment_jobs")
-                .select("*")
-                .eq("status", "failed")
-                .lt("attempt_count", 3)
-            )
-
-            jobs = result.data if result.data else []
-            logger.info("Found %d retryable enrichment jobs", len(jobs))
-            return jobs
-
-        except Exception as exc:
-            logger.error("Failed to get retryable enrichment jobs: %s", exc)
-            return []
-
     def select_paragraphs_by_quality(
         self,
         chunks: list[DocumentChunkDTO],
@@ -359,14 +293,6 @@ class EnrichmentJobService:
             sum(chunk.embedding[i] for chunk in paragraph_chunks) / len(paragraph_chunks)  # type: ignore
             for i in range(dimension)
         ]
-
-        def cosine_similarity(v1: list[float], v2: list[float]) -> float:
-            dot_product = sum(a * b for a, b in zip(v1, v2))
-            norm_v1 = math.sqrt(sum(a * a for a in v1))
-            norm_v2 = math.sqrt(sum(b * b for b in v2))
-            if norm_v1 == 0 or norm_v2 == 0:
-                return 0.0
-            return dot_product / (norm_v1 * norm_v2)
 
         scored_chunks = [
             (chunk, cosine_similarity(chunk.embedding, centroid))  # type: ignore

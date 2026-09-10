@@ -1,14 +1,11 @@
 import asyncio
-import inspect
 import logging
+import re
 import uuid
 from typing import Any
 
-from pydantic import BaseModel, Field
-
 import fitz
 import pymupdf4llm
-from asyncer import asyncify
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langchain_text_splitters import MarkdownTextSplitter
@@ -20,16 +17,13 @@ from tenacity import (
 )
 
 from app.database import execute_query, get_supabase_client
-from app.exceptions import get_retryable_exceptions
+from app.exceptions import RETRYABLE_EXCEPTIONS
 from app.schemas import DocumentChunkDTO
-from app.services.enrichment_job_service import EnrichmentJobService
+from app.services.enrichment_job_service import EnrichmentJobService, get_preset_cap
 from app.services.rag_service import initialize_user_embeddings, initialize_user_llm
-from app.services.storage_service import StorageService
+from app.services import storage_service
 
 logger = logging.getLogger(__name__)
-
-class GeneratedQuestions(BaseModel):
-    questions: list[str] = Field(description="A list of diverse questions that can be answered by the given paragraph.")
 
 QUESTIONS_PER_PARAGRAPH = 5
 CHUNK_SIZE = 1000
@@ -104,7 +98,7 @@ class PDFIngestionService:
         return chunks
 
     @retry(
-        retry=retry_if_exception_type(get_retryable_exceptions()),
+        retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
         wait=wait_random_exponential(multiplier=2, min=5, max=120),
         stop=stop_after_attempt(10),
     )
@@ -122,9 +116,7 @@ class PDFIngestionService:
         
         questions = []
         for line in content.split('\n'):
-            cleaned = line.strip()
-            import re
-            cleaned = re.sub(r'^(\d+\.|[-*+])\s+', '', cleaned)
+            cleaned = re.sub(r'^(\d+\.|[-*+])\s+', '', line.strip())
             if cleaned:
                 questions.append(cleaned)
             
@@ -158,7 +150,7 @@ class PDFIngestionService:
         document_id = document_record["id"]
 
         try:
-            file_path = await StorageService.upload_file(
+            file_path = await storage_service.upload_file(
                 user_id, document_id, pdf_bytes
             )
         except Exception:
@@ -191,7 +183,7 @@ class PDFIngestionService:
         job_service = EnrichmentJobService()
 
         try:
-            chunks = await asyncify(self.parse_pdf_bytes)(pdf_bytes, filename)
+            chunks = await asyncio.to_thread(self.parse_pdf_bytes, pdf_bytes, filename)
 
             embeddings_model = await initialize_user_embeddings(user_id)
 
@@ -240,7 +232,7 @@ class PDFIngestionService:
     ) -> None:
         try:
             preset = await job_service.get_user_preset(user_id)
-            cap = job_service.get_preset_cap(preset)
+            cap = get_preset_cap(preset)
 
             if cap > 0:
                 await job_service.create_job(
@@ -259,9 +251,9 @@ class PDFIngestionService:
                     chunks,
                     llm,
                     embeddings_model,
-                    batch_size,
                     job_service,
                     cap,
+                    batch_size,
                 )
         except Exception:
             logger.exception("Document %s question enrichment failed.", document_id)
@@ -274,17 +266,10 @@ class PDFIngestionService:
         chunks: list[DocumentChunkDTO],
         llm: BaseChatModel,
         embeddings_model: Embeddings,
+        job_service: EnrichmentJobService,
+        cap: int,
         batch_size: int = 100,
-        job_service: EnrichmentJobService | None = None,
-        cap: int | None = None,
     ) -> None:
-        if job_service is None:
-            job_service = EnrichmentJobService()
-
-        if cap is None:
-            preset = await job_service.get_user_preset(user_id)
-            cap = job_service.get_preset_cap(preset)
-
         await job_service.start_job(document_id, user_id)
 
         paragraph_chunks = job_service.select_paragraphs_by_quality(chunks, cap)
@@ -377,9 +362,7 @@ class PDFIngestionService:
             for chunk in chunks
         ]
 
-        vector_embeddings = await self._generate_embeddings(
-            embeddings_model, chunk_texts
-        )
+        vector_embeddings = await embeddings_model.aembed_documents(chunk_texts)
 
         for chunk, embedding_vector in zip(chunks, vector_embeddings):
             chunk.embedding = embedding_vector
@@ -402,18 +385,3 @@ class PDFIngestionService:
             batch = chunk_records[i : i + batch_size]
             await execute_query(supabase.table("document_chunks").insert(batch))
 
-    @staticmethod
-    async def _generate_embeddings(
-        embeddings_model: Embeddings, texts: list[str]
-    ) -> list[list[float]]:
-        async_embed_documents = getattr(embeddings_model, "aembed_documents", None)
-
-        if async_embed_documents:
-            async_result = async_embed_documents(texts)
-
-            if inspect.isawaitable(async_result):
-                return await async_result
-            elif isinstance(async_result, list):
-                return async_result
-
-        return await asyncify(embeddings_model.embed_documents)(texts)

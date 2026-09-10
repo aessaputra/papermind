@@ -3,10 +3,11 @@
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
+import { isNetworkError } from '@/lib/utils';
 import type { AuthState } from '@/types';
 
 function toUserFriendlyError(message: string): string {
-  if (message.includes('Failed to fetch')) {
+  if (isNetworkError(message)) {
     return 'Gagal terhubung ke server otentikasi. Periksa koneksi internet Anda.';
   }
   return message;

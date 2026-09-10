@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.enrichment_job_service import EnrichmentJobService
+from app.services.enrichment_job_service import EnrichmentJobService, get_preset_cap
 
 MOCK_USER_ID = "11111111-2222-3333-4444-555555555555"
 MOCK_DOC_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
@@ -57,7 +57,7 @@ async def test_create_job_should_insert_pending_record(mock_get_supabase):
     inserted_data = insert_call[0][0]
     assert inserted_data["document_id"] == MOCK_DOC_ID
     assert inserted_data["user_id"] == MOCK_USER_ID
-    assert inserted_data["status"] == "pending"
+    assert set(inserted_data) == {"document_id", "user_id", "total_paragraphs"}
     assert inserted_data["total_paragraphs"] == 10
 
 
@@ -196,84 +196,12 @@ async def test_complete_job_should_call_rpc_function(mock_get_supabase):
     )
 
 
-@pytest.mark.asyncio
-@patch("app.services.enrichment_job_service.get_supabase_client")
-async def test_fail_job_should_set_status_failed(mock_get_supabase):
-    mock_supabase, tables = _make_supabase_mock()
-    mock_get_supabase.return_value = mock_supabase
-
-    tables["document_enrichment_jobs"].update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
-        data=[{"status": "failed"}]
-    )
-
-    service = EnrichmentJobService()
-    await service.fail_job(
-        document_id=MOCK_DOC_ID,
-        user_id=MOCK_USER_ID,
-        error_message="Rate limit exceeded",
-        failed_paragraphs=3,
-    )
-
-    update_call = tables["document_enrichment_jobs"].update.call_args
-    update_data = update_call[0][0]
-    assert update_data["status"] == "failed"
-    assert update_data["last_error"] == "Rate limit exceeded"
-    assert update_data["failed_paragraphs"] == 3
-
-
-@pytest.mark.asyncio
-@patch("app.services.enrichment_job_service.get_supabase_client")
-async def test_fail_job_should_truncate_long_error_messages(mock_get_supabase):
-    mock_supabase, tables = _make_supabase_mock()
-    mock_get_supabase.return_value = mock_supabase
-
-    tables["document_enrichment_jobs"].update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
-        data=[{"status": "failed"}]
-    )
-
-    long_error = "x" * 1000
-    service = EnrichmentJobService()
-    await service.fail_job(
-        document_id=MOCK_DOC_ID,
-        user_id=MOCK_USER_ID,
-        error_message=long_error,
-    )
-
-    update_call = tables["document_enrichment_jobs"].update.call_args
-    update_data = update_call[0][0]
-    assert len(update_data["last_error"]) == 500
-
-
-@pytest.mark.asyncio
-@patch("app.services.enrichment_job_service.get_supabase_client")
-async def test_get_retryable_jobs_should_return_failed_jobs_below_max_attempts(mock_get_supabase):
-    mock_supabase, tables = _make_supabase_mock()
-    mock_get_supabase.return_value = mock_supabase
-
-    tables["document_enrichment_jobs"].select.return_value.eq.return_value.lt.return_value.execute.return_value = MagicMock(
-        data=[
-            {"id": "job-1", "document_id": "doc-1", "status": "failed", "attempt_count": 1},
-            {"id": "job-2", "document_id": "doc-2", "status": "failed", "attempt_count": 2},
-        ]
-    )
-
-    service = EnrichmentJobService()
-    jobs = await service.get_retryable_jobs()
-
-    assert len(jobs) == 2
-    assert all(j["status"] == "failed" for j in jobs)
-
-
-@pytest.mark.asyncio
-@patch("app.services.enrichment_job_service.get_supabase_client")
-async def test_get_enrichment_cap_should_return_preset_values(mock_get_supabase):
-    service = EnrichmentJobService()
-
-    assert service.get_preset_cap("off") == 0
-    assert service.get_preset_cap("standard") == 75
-    assert service.get_preset_cap("high") == 150
-    assert service.get_preset_cap("full") == 999999
-    assert service.get_preset_cap("unknown") == 75
+def test_get_enrichment_cap_should_return_preset_values():
+    assert get_preset_cap("off") == 0
+    assert get_preset_cap("standard") == 75
+    assert get_preset_cap("high") == 150
+    assert get_preset_cap("full") == 999999
+    assert get_preset_cap("unknown") == 75
 
 
 @pytest.mark.asyncio

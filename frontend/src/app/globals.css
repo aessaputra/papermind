@@ -137,3 +137,8 @@
 .minimal-button-primary:active:not(:disabled) {
   transform: scale(0.98);
 }
+
+.content-visibility-list > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 76px;
+}

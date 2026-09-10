@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile, status
 
 from app.auth import CurrentUserDep
+from app.config import settings
 from app.database import execute_query, get_supabase_client
 from app.schemas import (
     DocumentItemResponse,
@@ -14,7 +15,7 @@ from app.schemas import (
 )
 from app.services.enrichment_job_service import EnrichmentJobService
 from app.services.ingestion_service import PDFIngestionService
-from app.services.storage_service import StorageService
+from app.services import storage_service as storage_svc
 
 router = APIRouter(
     prefix="/api/documents",
@@ -44,7 +45,19 @@ async def upload_pdf_document(
             detail="Only PDF files (.pdf) are supported."
         )
 
+    max_bytes = settings.MAX_UPLOAD_MB * 1024 * 1024
+    if file.size is not None and file.size > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"File too large. Maximum size is {settings.MAX_UPLOAD_MB} MB."
+        )
+
     pdf_bytes = await file.read()
+    if len(pdf_bytes) > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"File too large. Maximum size is {settings.MAX_UPLOAD_MB} MB."
+        )
     if not pdf_bytes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -100,13 +113,7 @@ async def list_user_documents(user: CurrentUserDep) -> list[DocumentItemResponse
         enrichment_status = None
         job = await job_service.get_job(doc["id"])
         if job:
-            enrichment_status = EnrichmentStatusResponse(
-                status=job.get("status", "pending"),
-                total_paragraphs=job.get("total_paragraphs", 0),
-                processed_paragraphs=job.get("processed_paragraphs", 0),
-                question_chunks_created=job.get("question_chunks_created", 0),
-                failed_paragraphs=job.get("failed_paragraphs", 0),
-            )
+            enrichment_status = EnrichmentStatusResponse(**{"status": "pending", **job})
         documents.append(DocumentItemResponse(**doc, enrichment=enrichment_status))
 
     return documents
@@ -151,7 +158,7 @@ async def get_document_preview(
     else:
         doc = res.data[0]
         file_path = doc.get("file_path")
-        signed_url = await StorageService.create_signed_url(file_path) if file_path else None
+        signed_url = await storage_svc.create_signed_url(file_path) if file_path else None
     if doc is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -183,7 +190,7 @@ async def delete_document(
         file_path = res.data[0].get("file_path")
         if file_path:
             try:
-                await StorageService.delete_file(file_path)
+                await storage_svc.delete_file(file_path)
             except Exception:
                 logger.warning(
                     "Failed to delete storage file %s during document cleanup",

@@ -1,7 +1,8 @@
-import type { ApiResponse, Citation, DocumentItem, DocumentPreviewResponse, ProviderConfig, EmbeddingConfig, EmbeddingConfigSavePayload, EnrichmentConfig, EnrichmentConfigSavePayload } from '@/types';
+import type { ApiResponse, ChatMessage, ChatSession, Citation, DocumentItem, DocumentPreviewResponse, ProviderConfig, ProviderConfigCreatePayload, ProviderConfigUpdatePayload, EmbeddingConfig, EmbeddingConfigSavePayload, EnrichmentConfig, EnrichmentConfigSavePayload } from '@/types';
 
 
 import { createClient } from '@/lib/supabaseClient';
+import { isNetworkError } from '@/lib/utils';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -34,10 +35,6 @@ async function extractErrorDetail(response: Response, fallback: string): Promise
   }
 }
 
-function isNetworkError(message: string): boolean {
-  return message.includes('Failed to fetch') || message.includes('NetworkError');
-}
-
 async function apiFetch<T>(
   endpoint: string,
   options: RequestInit = {},
@@ -55,8 +52,10 @@ async function apiFetch<T>(
       },
     });
 
-    if (response.status === 404 && options.method === 'GET') {
-      return { success: true, data: null as any, error: null }; // specifically for getEmbeddingConfig
+    // GET 404 (e.g. embedding config unset) and DELETE 404 (already deleted
+    // elsewhere) both count as success: deletes are idempotent.
+    if (response.status === 404 && (options.method === 'GET' || options.method === 'DELETE')) {
+      return { success: true, data: null as any, error: null };
     }
 
     if (!response.ok) {
@@ -169,11 +168,11 @@ function parseSSEEvent(block: string, callbacks: SSEStreamCallbacks) {
 
 
 
-export function listChatSessions(token: string): Promise<ApiResponse<import('@/types').ChatSession[]>> {
+export function listChatSessions(token: string): Promise<ApiResponse<ChatSession[]>> {
   return apiFetch('/api/chat/sessions', undefined, token, 'Gagal mengambil riwayat sesi.');
 }
 
-export function getSessionMessages(sessionId: string, token: string): Promise<ApiResponse<import('@/types').ChatMessage[]>> {
+export function getSessionMessages(sessionId: string, token: string): Promise<ApiResponse<ChatMessage[]>> {
   return apiFetch(`/api/chat/sessions/${sessionId}/messages`, undefined, token, 'Gagal mengambil pesan percakapan.');
 }
 
@@ -217,7 +216,7 @@ export function listProviderConfigs(token: string): Promise<ApiResponse<Provider
 }
 
 export function createProviderConfig(
-  payload: import('@/types').ProviderConfigCreatePayload,
+  payload: ProviderConfigCreatePayload,
   token: string
 ): Promise<ApiResponse<ProviderConfig>> {
   return apiFetch(
@@ -230,7 +229,7 @@ export function createProviderConfig(
 
 export function updateProviderConfig(
   id: string,
-  payload: import('@/types').ProviderConfigUpdatePayload,
+  payload: ProviderConfigUpdatePayload,
   token: string
 ): Promise<ApiResponse<ProviderConfig>> {
   return apiFetch(

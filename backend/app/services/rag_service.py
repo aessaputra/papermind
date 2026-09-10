@@ -8,9 +8,8 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 
 from app.database import execute_query, get_supabase_client
+from app.services import llm_factory, prompt_builder
 from app.services.context_retriever import ContextRetriever
-from app.services.llm_factory import LLMFactory
-from app.services.prompt_builder import PromptBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -43,11 +42,11 @@ class RAGService:
         full_response = ""
 
         if not chunks:
-            no_info_msg = PromptBuilder.NO_CONTEXT_MESSAGE
+            no_info_msg = prompt_builder.NO_CONTEXT_MESSAGE
             full_response = no_info_msg
             yield ServerSentEvent(data={"token": no_info_msg}, event="token")
         else:
-            prompt = PromptBuilder.format_context_prompt(query, chunks)
+            prompt = prompt_builder.format_context_prompt(query, chunks)
 
             async for chunk in self.llm.astream(prompt):
                 token_content = chunk.content if hasattr(chunk, "content") else str(chunk)
@@ -85,7 +84,7 @@ async def initialize_user_embeddings(user_id: str) -> Embeddings:
             detail="Konfigurasi Model Embedding belum diatur. Silakan atur model embedding di menu Settings.",
         )
 
-    return LLMFactory.get_embeddings_for_config(embedding_res.data[0])
+    return llm_factory.get_embeddings_for_config(embedding_res.data[0])
 
 
 async def initialize_user_llm(user_id: str, provider: str | None = None) -> BaseChatModel:
@@ -118,7 +117,7 @@ async def initialize_user_llm(user_id: str, provider: str | None = None) -> Base
             detail="Konfigurasi AI Provider belum diatur. Silakan tambahkan API key Anda di menu Settings.",
         )
 
-    return LLMFactory.get_llm_for_config(provider_records[0])
+    return llm_factory.get_llm_for_config(provider_records[0])
 
 
 async def initialize_user_models(user_id: str, provider: str | None = None) -> tuple[BaseChatModel, Embeddings]:

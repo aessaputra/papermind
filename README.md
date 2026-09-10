@@ -33,7 +33,7 @@
 ### 1. Database Setup (Supabase SQL Migration)
 
 1. Open your [Supabase Dashboard](https://supabase.com/dashboard) -> SQL Editor.
-2. Execute the migration script provided in [`docs/supabase_schema.sql`](docs/supabase_schema.sql).
+2. Apply the migration scripts in `supabase/migrations/` in filename order.
 3. This creates PostgreSQL tables (`documents`, `document_chunks`, `chat_sessions`, `chat_messages`), foreign key indexes, HNSW vector index (`vector_cosine_ops`), and cached RLS policies.
 
 ### 2. Backend Setup (FastAPI)

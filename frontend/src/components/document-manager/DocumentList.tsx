@@ -30,7 +30,7 @@ export function DocumentList({
           Belum ada dokumen yang diunggah.
         </div>
       ) : (
-        <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+        <div className="space-y-2 max-h-80 overflow-y-auto pr-1 content-visibility-list">
           {documents.map((doc) => (
             <DocumentItemRow
               key={doc.id}

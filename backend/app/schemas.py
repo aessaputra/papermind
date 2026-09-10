@@ -125,14 +125,14 @@ class EmbeddingConfigSaveRequest(BaseModel):
     api_key: str | None = Field(None, description="Raw API key string (optional if reusing provider key)")
     base_url: str | None = Field(None, max_length=500)
     model_name: str = Field(min_length=1, description="Embedding model name slug")
-    embedding_dimensions: int = Field(768, gt=0, description="Vector output dimensions")
+    embedding_dimensions: int | None = Field(None, gt=0, description="Vector output dimensions (omit for auto-detect)")
 
 
 class EmbeddingConfigResponse(BaseModel):
     provider: str
     base_url: str | None = None
     model_name: str
-    embedding_dimensions: int
+    embedding_dimensions: int | None
     locked: bool
 
 

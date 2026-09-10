@@ -162,7 +162,7 @@ def _configure_embedding_config(tables: dict[str, MagicMock]) -> None:
 
 
 @pytest.mark.asyncio
-@patch("app.services.llm_factory.LLMFactory.get_embeddings_for_config")
+@patch("app.services.llm_factory.get_embeddings_for_config")
 @patch("app.services.rag_service.get_supabase_client")
 @patch("app.services.ingestion_service.get_supabase_client")
 async def test_process_document_should_embed_chunks_and_mark_document_ready(
@@ -175,18 +175,19 @@ async def test_process_document_should_embed_chunks_and_mark_document_ready(
     _configure_embedding_config(tables)
 
     mock_embeddings = MagicMock()
-    mock_embeddings.embed_documents.return_value = [[0.1, 0.2, 0.3]]
+    mock_embeddings.aembed_documents = AsyncMock(return_value=[[0.1, 0.2, 0.3]])
     mock_get_embeddings.return_value = mock_embeddings
 
     pdf_bytes = _build_pdf_with_text([["Test paragraph text."]])
 
     ingestion_service = PDFIngestionService()
-    await ingestion_service.process_document(
-        document_id=MOCK_DOC_ID,
-        user_id=MOCK_USER_ID,
-        filename="paper.pdf",
-        pdf_bytes=pdf_bytes,
-    )
+    with patch("app.services.enrichment_job_service.EnrichmentJobService.get_user_preset", AsyncMock(return_value="off")):
+        await ingestion_service.process_document(
+            document_id=MOCK_DOC_ID,
+            user_id=MOCK_USER_ID,
+            filename="paper.pdf",
+            pdf_bytes=pdf_bytes,
+        )
 
     inserted_records = tables["document_chunks"].insert.call_args[0][0]
     assert len(inserted_records) >= 1
@@ -197,12 +198,12 @@ async def test_process_document_should_embed_chunks_and_mark_document_ready(
     assert first_record["page_number"] == 1
     assert first_record["metadata"]["type"] == "paragraph"
 
-    mock_embeddings.embed_documents.assert_called()
+    mock_embeddings.aembed_documents.assert_awaited()
     tables["documents"].update.assert_called_with({"status": "ready", "total_pages": 1})
 
 
 @pytest.mark.asyncio
-@patch("app.services.llm_factory.LLMFactory.get_embeddings_for_config")
+@patch("app.services.llm_factory.get_embeddings_for_config")
 @patch("app.services.rag_service.get_supabase_client")
 @patch("app.services.ingestion_service.get_supabase_client")
 async def test_process_document_should_mark_failed_when_embedding_fails(
@@ -215,7 +216,7 @@ async def test_process_document_should_mark_failed_when_embedding_fails(
     _configure_embedding_config(tables)
 
     mock_embeddings = MagicMock()
-    mock_embeddings.embed_documents.side_effect = Exception("429 Too Many Requests")
+    mock_embeddings.aembed_documents = AsyncMock(side_effect=Exception("429 Too Many Requests"))
     mock_get_embeddings.return_value = mock_embeddings
 
     pdf_bytes = _build_pdf_with_text([["Test paragraph text."]])
@@ -266,7 +267,7 @@ async def test_enrich_document_with_questions_should_store_linked_question_chunk
     ))
 
     mock_embeddings = MagicMock()
-    mock_embeddings.embed_documents.return_value = [[0.1, 0.2], [0.3, 0.4]]
+    mock_embeddings.aembed_documents = AsyncMock(return_value=[[0.1, 0.2], [0.3, 0.4]])
 
     ingestion_service = PDFIngestionService()
     await ingestion_service.enrich_document_with_questions(
@@ -277,6 +278,7 @@ async def test_enrich_document_with_questions_should_store_linked_question_chunk
         llm=mock_llm,
         embeddings_model=mock_embeddings,
         job_service=mock_job_service,
+        cap=75,
     )
 
     inserted_records = tables["document_chunks"].insert.call_args[0][0]
@@ -337,7 +339,7 @@ async def test_enrich_document_with_questions_should_skip_failed_paragraphs_and_
     mock_llm.ainvoke = mock_ainvoke
 
     mock_embeddings = MagicMock()
-    mock_embeddings.embed_documents.return_value = [[0.1, 0.2]]
+    mock_embeddings.aembed_documents = AsyncMock(return_value=[[0.1, 0.2]])
 
     ingestion_service = PDFIngestionService()
     await ingestion_service.enrich_document_with_questions(
@@ -348,6 +350,7 @@ async def test_enrich_document_with_questions_should_skip_failed_paragraphs_and_
         llm=mock_llm,
         embeddings_model=mock_embeddings,
         job_service=mock_job_service,
+        cap=75,
     )
 
     inserted_records = tables["document_chunks"].insert.call_args[0][0]
@@ -387,7 +390,7 @@ async def test_enrich_document_with_questions_should_respect_cap_parameter(
     ))
 
     mock_embeddings = MagicMock()
-    mock_embeddings.embed_documents.return_value = [[0.1, 0.2]] * 75
+    mock_embeddings.aembed_documents = AsyncMock(return_value=[[0.1, 0.2]] * 75)
 
     ingestion_service = PDFIngestionService()
     await ingestion_service.enrich_document_with_questions(

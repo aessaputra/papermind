@@ -1,5 +1,39 @@
+import Link from 'next/link';
 import type { AuthMode } from '@/hooks/useAuth';
 import type { AuthState } from '@/types';
+
+export function AuthHeader({ mode }: { mode: AuthMode }) {
+  const isSignIn = mode === 'signin';
+  const title = isSignIn ? 'Masuk' : 'Daftar';
+
+  return (
+    <div className="flex items-baseline justify-between border-b border-subtle pb-4">
+      <h1 className="font-serif text-3xl font-semibold tracking-tight text-primary">
+        {title}
+      </h1>
+
+      <div className="flex items-center gap-1.5 text-xs font-mono">
+        <span className="text-muted">{isSignIn ? 'Belum punya akun?' : 'Sudah punya akun?'}</span>
+        <Link
+          href={isSignIn ? '/register' : '/login'}
+          className="text-primary hover:text-secondary underline underline-offset-4 transition-colors duration-150"
+        >
+          {isSignIn ? 'Daftar' : 'Masuk'}
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export function AuthError({ message }: { message?: string }) {
+  if (!message) return null;
+
+  return (
+    <div className="p-3 rounded-md bg-(--pastel-red-bg) border border-(--pastel-red-text)/20 text-(--pastel-red-text) text-xs leading-normal">
+      {message}
+    </div>
+  );
+}
 
 interface AuthFormProps {
   mode: AuthMode;

@@ -1,9 +1,7 @@
 'use client';
 
 import { useAuth } from '@/hooks/useAuth';
-import { AuthHeader } from '@/components/auth/AuthHeader';
-import { AuthError } from '@/components/auth/AuthError';
-import { AuthForm } from '@/components/auth/AuthForm';
+import { AuthError, AuthForm, AuthHeader } from '@/components/auth/AuthForm';
 
 export default function LoginPage() {
   const {

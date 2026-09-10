@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useDeferredValue } from 'react';
+import React, { useState, useDeferredValue, useEffect } from 'react';
 import Link from 'next/link';
 import { LayersIcon, LockClosedIcon, ChevronDownIcon, ChevronUpIcon, CheckIcon } from '@radix-ui/react-icons';
 import * as Select from '@radix-ui/react-select';
@@ -43,7 +43,7 @@ function EmbeddingSettingsSection({
   const targetConfigId = configs.find((c) => c.provider === embProvider)?.id;
 
   const fetcherKey = embeddingConfig?.locked || !targetConfigId
-    ? null 
+    ? null
     : ['verifyAndFetchModels', embProvider, deferredBaseUrl, targetConfigId, token, 'embedding'];
 
   const fetcher = async ([, prov, url, cid, tok, type]: any) => {
@@ -57,13 +57,16 @@ function EmbeddingSettingsSection({
 
   const fetchedEmbModels = res?.data?.models || [];
   const fetchError = res?.error || res?.data?.error || null;
+  const probedDims = res?.data?.probed_dimension || null;
 
-  if (res !== prevRes) {
-    setPrevRes(res);
-    if (res?.success && res.data?.models && res.data.models.length > 0 && !embModelName) {
-      setEmbModelName(res.data.default_model || '');
+  useEffect(() => {
+    if (res !== prevRes) {
+      setPrevRes(res);
+      if (res?.success && res.data?.models && res.data.models.length > 0 && !embModelName) {
+        setEmbModelName(res.data.default_model || '');
+      }
     }
-  }
+  }, [res, prevRes, embModelName]);
 
   const handleSaveEmbedding = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -77,7 +80,7 @@ function EmbeddingSettingsSection({
       setEmbError('Nama model embedding wajib diisi.');
       return;
     }
-    if (!embDimensions || embDimensions < 64) {
+    if (embDimensions !== '' && embDimensions < 64) {
       setEmbError('Dimensi vektor minimal 64.');
       return;
     }
@@ -88,7 +91,7 @@ function EmbeddingSettingsSection({
       const payload = {
         provider: embProvider,
         model_name: embModelName.trim(),
-        embedding_dimensions: embDimensions,
+        embedding_dimensions: embDimensions === '' ? null : embDimensions,
         base_url: embBaseUrl.trim() || undefined,
       };
 
@@ -291,14 +294,23 @@ function EmbeddingSettingsSection({
             </div>
 
             <div>
-              <label htmlFor="embDimensions" className="block text-xs font-mono uppercase tracking-wider text-muted mb-1.5">
-                DIMENSI
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="embDimensions" className="block text-xs font-mono uppercase tracking-wider text-muted">
+                  DIMENSI
+                </label>
+                {probedDims && !embDimensions ? (
+                  <span className="text-xs font-mono text-muted" title="Terdeteksi otomatis dari provider">
+                    auto: {probedDims}
+                  </span>
+                ) : !embDimensions ? (
+                  <span className="text-xs font-mono text-muted/50">opsional</span>
+                ) : null}
+              </div>
               <input
                 id="embDimensions"
                 type="number"
                 disabled={!!embeddingConfig?.locked}
-                placeholder="768"
+                placeholder={probedDims ? `auto (${probedDims})` : 'auto'}
                 value={embDimensions === '' ? '' : embDimensions}
                 onChange={(e) => setEmbDimensions(e.target.value === '' ? '' : parseInt(e.target.value) || '')}
                 className="minimal-input w-full px-3 py-2 rounded-md text-xs font-mono disabled:opacity-50"

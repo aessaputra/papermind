@@ -1,9 +1,9 @@
+import asyncio
 import logging
 from functools import lru_cache
 from typing import Annotated
 
 import jwt
-from asyncer import asyncify
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
@@ -43,7 +43,7 @@ async def _decode_jwt_token(token: str, secret: str, audience: str) -> dict:
     jwks_client = get_jwks_client() if kid and _is_asymmetric_algorithm(algorithm) else None
 
     if jwks_client:
-        signing_key = await asyncify(jwks_client.get_signing_key_from_jwt)(token)
+        signing_key = await asyncio.to_thread(jwks_client.get_signing_key_from_jwt, token)
         return jwt.decode(
             token,
             signing_key.key,

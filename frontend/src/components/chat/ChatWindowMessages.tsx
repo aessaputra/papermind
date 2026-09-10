@@ -8,6 +8,12 @@ import { useDocument } from '@/context/DocumentContext';
 import { useChat } from '@/context/ChatContext';
 import { ChatMessageItem } from './ChatMessageItem';
 
+const SUGGESTION_PROMPTS = [
+  'Buat ringkasan dari dokumen ini.',
+  'Adakah informasi penting yang perlu saya perhatikan?',
+  'Apa kesimpulan utama dari dokumen ini?',
+];
+
 interface ChatWindowMessagesProps {
   readonly onSetInputQuery: (text: string) => void;
 }
@@ -19,19 +25,9 @@ function ChatWindowMessages({ onSetInputQuery }: ChatWindowMessagesProps) {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: isStreaming ? 'auto' : 'smooth' });
   }, [messages, isStreaming]);
-
-  const suggestionPrompts = [
-    'Buat ringkasan dari dokumen ini.',
-    'Adakah informasi penting yang perlu saya perhatikan?',
-    'Apa kesimpulan utama dari dokumen ini?',
-  ];
 
   return (
     <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6">
@@ -86,7 +82,7 @@ function ChatWindowMessages({ onSetInputQuery }: ChatWindowMessagesProps) {
 
 
               <div className="flex flex-col gap-2 w-full">
-                {suggestionPrompts.map((promptText, idx) => (
+                {SUGGESTION_PROMPTS.map((promptText, idx) => (
                   <button
                     key={idx}
                     type="button"

@@ -1,4 +1,10 @@
 
+import hashlib
+import ipaddress
+import time
+from typing import Any
+from urllib.parse import urlparse
+
 from fastapi import APIRouter, HTTPException, status
 
 from app.auth import CurrentUserDep
@@ -15,8 +21,8 @@ from app.schemas import (
     VerifyModelsResponse,
 )
 from app.services.crypto_service import CryptoService
-from app.services.enrichment_job_service import DEFAULT_PRESET, EnrichmentJobService
-from app.services.model_service import ModelService
+from app.services.enrichment_job_service import DEFAULT_PRESET, get_preset_cap
+from app.services import model_service
 
 router = APIRouter(
     prefix="/api/settings",
@@ -86,11 +92,69 @@ async def create_provider_config(
     return _format_config_response(response.data[0])
 
 
+_VERIFY_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_VERIFY_CACHE_TTL_SECONDS = 300.0
+_VERIFY_USER_CALLS: dict[str, list[float]] = {}
+VERIFY_MAX_CALLS_PER_MINUTE = 20
+
+
+def _verify_request_key(user_id: str, payload: "VerifyModelsRequest") -> str:
+    raw_key = payload.api_key or ""
+    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()[:16] if raw_key else "saved"
+    return "|".join([user_id, payload.provider, payload.model_type, key_hash, payload.base_url or "", payload.config_id or ""])
+
+
+def _get_cached_verify(bucket_key: str) -> dict[str, Any] | None:
+    hit = _VERIFY_CACHE.get(bucket_key)
+    if hit and time.monotonic() - hit[0] < _VERIFY_CACHE_TTL_SECONDS:
+        return hit[1]
+    return None
+
+
+def _check_verify_rate_limit(user_id: str) -> None:
+    now = time.monotonic()
+    if len(_VERIFY_USER_CALLS) > 1024:
+        _VERIFY_USER_CALLS.clear()
+    calls = [t for t in _VERIFY_USER_CALLS.get(user_id, []) if now - t < 60.0]
+    if len(calls) >= VERIFY_MAX_CALLS_PER_MINUTE:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many verification requests. Please wait a minute.",
+        )
+    _VERIFY_USER_CALLS[user_id] = [*calls, now]
+
+
+def _validate_public_base_url(base_url: str | None) -> None:
+    if not base_url:
+        return
+    parsed = urlparse(base_url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="base_url must use http or https scheme.",
+        )
+    try:
+        ip = ipaddress.ip_address(parsed.hostname or "")
+    except ValueError:
+        return
+    if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="base_url must not target internal network addresses.",
+        )
+
+
 @router.post("/providers/verify-models", response_model=VerifyModelsResponse)
 async def verify_and_list_models(
     payload: VerifyModelsRequest,
     user: CurrentUserDep,
 ) -> VerifyModelsResponse:
+    bucket_key = _verify_request_key(user.user_id, payload)
+    cached = _get_cached_verify(bucket_key)
+    if cached is not None:
+        return VerifyModelsResponse(**cached)
+    _validate_public_base_url(payload.base_url)
+    _check_verify_rate_limit(user.user_id)
     api_key = payload.api_key
     base_url = payload.base_url
 
@@ -110,12 +174,15 @@ async def verify_and_list_models(
         if not base_url:
             base_url = url_from_db
 
-    res = await ModelService.fetch_available_models(
+    res = await model_service.fetch_available_models(
         provider=payload.provider,
         api_key=api_key or "",
         base_url=base_url,
         model_type=payload.model_type,
     )
+    if len(_VERIFY_CACHE) > 1024:
+        _VERIFY_CACHE.clear()
+    _VERIFY_CACHE[bucket_key] = (time.monotonic(), res)
     return VerifyModelsResponse(**res)
 
 
@@ -277,13 +344,31 @@ async def save_embedding_config(
             detail=f"API key untuk provider '{payload.provider}' belum dikonfigurasi. Masukkan API key atau simpan Provider Config terlebih dahulu."
         )
 
+    dimensions = payload.embedding_dimensions
+    if dimensions is None:
+        raw_key = payload.api_key or (
+            crypto.decrypt(api_key_enc) if api_key_enc else ""
+        )
+        probed = await model_service.fetch_available_models(
+            provider=payload.provider,
+            api_key=raw_key,
+            base_url=payload.base_url,
+            model_type="embedding",
+        )
+        if not probed.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=probed.get("error") or "Verifikasi embedding gagal. Isi kolom DIMENSI secara manual.",
+            )
+        # auto: store NULL, dimensions omitted from gateway requests at runtime.
+
     data = {
         "user_id": user.user_id,
         "provider": payload.provider,
         "api_key_enc": api_key_enc,
         "base_url": payload.base_url,
         "model_name": payload.model_name,
-        "embedding_dimensions": payload.embedding_dimensions,
+        "embedding_dimensions": dimensions,
     }
 
     upsert_res = await execute_query(
@@ -309,10 +394,9 @@ async def get_enrichment_config(user: CurrentUserDep) -> EnrichmentConfigRespons
         .eq("user_id", user.user_id)
     )
     preset = response.data[0].get("preset", DEFAULT_PRESET) if response.data else DEFAULT_PRESET
-    job_service = EnrichmentJobService()
     return EnrichmentConfigResponse(
         preset=preset,
-        max_enriched_paragraphs=job_service.get_preset_cap(preset),
+        max_enriched_paragraphs=get_preset_cap(preset),
     )
 
 
@@ -334,9 +418,8 @@ async def save_enrichment_config(
         )
 
     preset = response.data[0].get("preset", payload.preset)
-    job_service = EnrichmentJobService()
     return EnrichmentConfigResponse(
         preset=preset,
-        max_enriched_paragraphs=job_service.get_preset_cap(preset),
+        max_enriched_paragraphs=get_preset_cap(preset),
     )
 

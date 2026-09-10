@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useDeferredValue } from 'react';
+import React, { useState, useDeferredValue, useEffect } from 'react';
 import useSWR from 'swr';
 import * as Select from '@radix-ui/react-select';
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from '@radix-ui/react-icons';
@@ -48,7 +48,10 @@ function ProviderFormCard({
   const deferredApiKey = useDeferredValue(formApiKey.trim());
   const deferredBaseUrl = useDeferredValue(formBaseUrl.trim());
 
-  const fetcherKey = ['verifyAndFetchModels', formProvider, deferredApiKey, deferredBaseUrl, editingConfigId, token, 'chat'];
+  const canVerify = Boolean(deferredApiKey) || Boolean(editingConfigId);
+  const fetcherKey = canVerify
+    ? ['verifyAndFetchModels', formProvider, deferredApiKey, deferredBaseUrl, editingConfigId, token, 'chat']
+    : null;
 
   const fetcher = async ([, prov, key, url, cid, tok, type]: any) => {
     return verifyAndFetchModels(prov, key || undefined, url || undefined, cid || undefined, tok, type);
@@ -62,12 +65,14 @@ function ProviderFormCard({
   const fetchedModels = res?.success && res.data?.models ? res.data.models : [];
   const fetchError = res?.error || res?.data?.error || null;
 
-  if (res !== prevRes) {
-    setPrevRes(res);
-    if (res?.success && res.data?.models && res.data.models.length > 0 && !formModelName) {
-      setFormModelName(res.data.default_model || '');
+  useEffect(() => {
+    if (res !== prevRes) {
+      setPrevRes(res);
+      if (res?.success && res.data?.models && res.data.models.length > 0 && !formModelName) {
+        setFormModelName(res.data.default_model || '');
+      }
     }
-  }
+  }, [res, prevRes, formModelName]);
 
   const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
