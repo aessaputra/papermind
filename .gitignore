@@ -32,12 +32,3 @@ npm-debug.log*
 # Supabase
 supabase/.temp/
 supabase/.branches/
-
-# AI Agents & Scratch
-.agents/
-.scratch/
-.superpowers/
-opencode.jsonc
-
-# Local documentation
-docs/
