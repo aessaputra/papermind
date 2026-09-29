@@ -1,6 +1,6 @@
 # 📚 PaperMind System
 
-> **A Production-Grade Full-Stack RAG (Retrieval-Augmented Generation) PDF Chatbot**  
+> **A full-stack RAG (Retrieval-Augmented Generation) PDF chatbot project**
 > Built with **FastAPI**, **LangChain**, **Supabase (`pgvector` & Auth)**, **Next.js 15 (App Router)**, **React 19**, **TypeScript**, and **Tailwind CSS v4**.
 
 ---
@@ -11,8 +11,16 @@
 - ⚡ **Realtime SSE Token Streaming**: Server-Sent Events (SSE) token-by-token streaming response with live typing effect.
 - 🎯 **Page-Level PDF Citations**: Exact page number references attached to AI answers with interactive side-drawer preview.
 - 🤖 **Multi-Provider LLM Engine**: Seamless switching between **Google Gemini (Default)**, **OpenAI (GPT-4o mini)**, and **Ollama (Local Llama 3)**.
-- 🔒 **Enterprise-Grade Supabase Auth & RLS**: JWT Bearer token validation and Row Level Security with cached policy plan evaluation `((select auth.uid()) = user_id)`.
-- 🎨 **Glassmorphism Dark Theme UI**: Sleek, modern dark mode UI built with Tailwind CSS v4 and Lucide React icons.
+- 🔒 **Supabase Auth & RLS**: JWT Bearer token validation and Row Level Security with cached policy plan evaluation `((select auth.uid()) = user_id)`.
+- 🎨 **Dark Theme UI**: Responsive dark mode UI built with Tailwind CSS v4 and Radix icons.
+
+### How the interface works
+
+1. Upload one or more PDFs in the document manager; the FastAPI backend registers each file, processes it in the background, and exposes its status to the UI.
+2. Select documents and ask a question. The Next.js chat interface sends the request to the FastAPI RAG endpoint and renders streamed SSE tokens as they arrive.
+3. Open a citation to inspect the cited page number and retrieved document context. Chat sessions can be reopened from the sidebar.
+
+No public demo or screenshots are included in this repository; run locally with your own Supabase project and provider configuration using the steps below.
 
 ---
 
@@ -20,7 +28,7 @@
 
 | Layer | Technology / Package |
 |---|---|
-| **Frontend** | Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS v4, `@supabase/ssr`, Lucide Icons |
+| **Frontend** | Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS v4, `@supabase/ssr`, Radix Icons |
 | **Backend API** | FastAPI, PyYAML, PyJWT, Pydantic v2, Uvicorn |
 | **RAG & Vector Store** | LangChain (`langchain-google-genai`, `langchain-openai`, `langchain-ollama`), PyPDF, Supabase Vector (`pgvector` HNSW index) |
 | **Database & Auth** | Supabase PostgreSQL, Supabase Auth (HS256 JWT) |
@@ -55,7 +63,7 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env and set your SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and GEMINI_API_KEY
 
-# Run Pytest Suite (15/15 passing tests)
+# Run backend tests (results depend on your environment and configuration)
 python -m pytest tests/ -v
 
 # Run FastAPI Server locally
@@ -104,15 +112,15 @@ Open [http://localhost:3000](http://localhost:3000) for the Next.js frontend and
 
 ## 🧪 Testing & Verification
 
-The project includes 100% passing unit & integration tests covering authentication, configuration, PDF ingestion chunking, RAG SSE streaming, and router endpoints:
+The backend includes tests for authentication, configuration, PDF ingestion, RAG streaming, and router endpoints. Run them in your configured environment; no passing count is claimed here without a current test run. Frontend automated tests are not included yet.
 
 ```bash
 cd backend
-venv/Scripts/python -m pytest tests/ -v
+python -m pytest tests/ -v
 ```
 
 ---
 
 ## 📄 License
 
-MIT License - Created for Production PaperMind Applications.
+MIT License.
