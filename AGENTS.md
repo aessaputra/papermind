@@ -9,7 +9,7 @@
 The project follows a **two-service monorepo** layout:
 
 ```
-rag-pdf-chatbot/
+papermind/
 ├── backend/          # FastAPI REST + SSE API (Python)
 ├── frontend/         # Next.js 15 App Router (TypeScript)
 ├── supabase/         # SQL migrations for Supabase PostgreSQL
