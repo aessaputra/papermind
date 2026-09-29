@@ -12,10 +12,6 @@ Chat with your PDF documents and trace answers back to their source pages. Paper
 - Bring your own model and embedding API keys. Provider keys are encrypted before storage; supported chat providers include Gemini, OpenAI, OpenRouter, and OpenAI-compatible endpoints.
 - Keep each user's documents and chats isolated with Supabase Auth and row-level security.
 
-### Suggested starting questions
-
-![Chat start screen with an active document and suggested questions](assets/img/D7O6_FGcmt-700.webp)
-
 ## Stack
 
 | Component | Technology |
