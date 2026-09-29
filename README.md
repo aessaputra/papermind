@@ -1,126 +1,75 @@
-# 📚 PaperMind System
+# PaperMind
 
-> **A full-stack RAG (Retrieval-Augmented Generation) PDF chatbot project**
-> Built with **FastAPI**, **LangChain**, **Supabase (`pgvector` & Auth)**, **Next.js 15 (App Router)**, **React 19**, **TypeScript**, and **Tailwind CSS v4**.
+Chat with your PDF documents and trace answers back to their source pages. PaperMind combines a Next.js interface with a FastAPI retrieval pipeline, Supabase Auth, and PostgreSQL with `pgvector`.
 
----
+![PaperMind document chat with a cited answer](assets/img/mGMJ3RTFsO-700.webp)
 
-## 🌟 Key Features
+## What it does
 
-- 📑 **Multi-File PDF Ingestion**: Drag-and-drop PDF upload with automatic text parsing (`pypdf`) and metadata preservation.
-- ⚡ **Realtime SSE Token Streaming**: Server-Sent Events (SSE) token-by-token streaming response with live typing effect.
-- 🎯 **Page-Level PDF Citations**: Exact page number references attached to AI answers with interactive side-drawer preview.
-- 🤖 **Multi-Provider LLM Engine**: Seamless switching between **Google Gemini (Default)**, **OpenAI (GPT-4o mini)**, and **Ollama (Local Llama 3)**.
-- 🔒 **Supabase Auth & RLS**: JWT Bearer token validation and Row Level Security with cached policy plan evaluation `((select auth.uid()) = user_id)`.
-- 🎨 **Dark Theme UI**: Responsive dark mode UI built with Tailwind CSS v4 and Radix icons.
+- Upload PDFs and process them in the background for search and chat.
+- Ask questions across documents and receive streamed answers with page-level citations.
+- Reopen previous conversations and preview cited document pages.
+- Bring your own model and embedding API keys. Provider keys are encrypted before storage; supported chat providers include Gemini, OpenAI, OpenRouter, and OpenAI-compatible endpoints.
+- Keep each user's documents and chats isolated with Supabase Auth and row-level security.
 
-### How the interface works
+### Suggested starting questions
 
-1. Upload one or more PDFs in the document manager; the FastAPI backend registers each file, processes it in the background, and exposes its status to the UI.
-2. Select documents and ask a question. The Next.js chat interface sends the request to the FastAPI RAG endpoint and renders streamed SSE tokens as they arrive.
-3. Open a citation to inspect the cited page number and retrieved document context. Chat sessions can be reopened from the sidebar.
+![Chat start screen with an active document and suggested questions](assets/img/D7O6_FGcmt-700.webp)
 
-No public demo or screenshots are included in this repository; run locally with your own Supabase project and provider configuration using the steps below.
+## Stack
 
----
+| Component | Technology |
+| --- | --- |
+| Web | Next.js 15, React 19, TypeScript, Tailwind CSS v4 |
+| API | FastAPI, Pydantic, Server-Sent Events |
+| Retrieval | LangChain, PyMuPDF, Supabase PostgreSQL with `pgvector` |
+| Identity | Supabase Auth and PostgreSQL row-level security |
 
-## 🛠️ Technology Stack
+## Run locally
 
-| Layer | Technology / Package |
-|---|---|
-| **Frontend** | Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS v4, `@supabase/ssr`, Radix Icons |
-| **Backend API** | FastAPI, PyYAML, PyJWT, Pydantic v2, Uvicorn |
-| **RAG & Vector Store** | LangChain (`langchain-google-genai`, `langchain-openai`, `langchain-ollama`), PyPDF, Supabase Vector (`pgvector` HNSW index) |
-| **Database & Auth** | Supabase PostgreSQL, Supabase Auth (HS256 JWT) |
-| **Containerization** | Docker, Multi-Stage Dockerfile, Docker Compose |
+You need Python 3.11+, Node.js 18+, npm, and a Supabase project. Configure at least one chat provider and an embedding provider in the app after signing in.
 
----
+1. Apply the SQL files in `supabase/migrations/` to your Supabase database **in filename order**.
+2. Start the backend:
 
-## 🚀 Quick Start Guide
+   ```bash
+   cd backend
+   python -m venv venv
+   source venv/bin/activate  # Windows: venv\Scripts\activate
+   pip install -r requirements.txt
+   cp .env.example .env
+   # Set SUPABASE_URL, SUPABASE_SECRET_KEY, SETTINGS_ENCRYPTION_KEY,
+   # and your project's SUPABASE_JWKS_URL in .env.
+   uvicorn app.main:app --reload --port 8000
+   ```
 
-### 1. Database Setup (Supabase SQL Migration)
+3. In another terminal, start the frontend:
 
-1. Open your [Supabase Dashboard](https://supabase.com/dashboard) -> SQL Editor.
-2. Apply the migration scripts in `supabase/migrations/` in filename order.
-3. This creates PostgreSQL tables (`documents`, `document_chunks`, `chat_sessions`, `chat_messages`), foreign key indexes, HNSW vector index (`vector_cosine_ops`), and cached RLS policies.
+   ```bash
+   cd frontend
+   npm install
+   cp .env.example .env.local
+   # Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.
+   npm run dev
+   ```
 
-### 2. Backend Setup (FastAPI)
+Open [localhost:3000](http://localhost:3000). The API runs at [localhost:8000](http://localhost:8000), with interactive API docs at [localhost:8000/docs](http://localhost:8000/docs). Set `NEXT_PUBLIC_API_URL` in `frontend/.env.local` if the API is elsewhere.
 
-```bash
-cd backend
+> [!IMPORTANT]
+> Never commit real API keys or `.env` files. The Supabase secret key and encryption key belong on the backend only.
 
-# Create virtual environment
-python -m venv venv
-# Windows:
-venv\Scripts\activate
-# Linux/macOS:
-source venv/bin/activate
+### Docker Compose
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure Environment Variables (.env)
-cp .env.example .env
-# Edit .env and set your SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and GEMINI_API_KEY
-
-# Run backend tests (results depend on your environment and configuration)
-python -m pytest tests/ -v
-
-# Run FastAPI Server locally
-uvicorn app.main:app --reload --port 8000
-```
-
-### 3. Frontend Setup (Next.js 15)
+For the development containers, create `backend/.env` and `frontend/.env` from their respective examples. Also set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `NEXT_PUBLIC_API_URL` in the **root** `.env` file for Compose build arguments. Then run:
 
 ```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Configure Environment Variables (.env.local)
-cp .env.example .env.local
-# Edit .env.local and set NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-# Run Next.js Dev Server
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-
----
-
-## 🐳 Docker Deployment
-
-To run the full-stack application (Backend FastAPI + Frontend Next.js 15) using Docker Compose:
-
-```bash
-# 1. Ensure backend/.env exists and is configured
-cp backend/.env.example backend/.env
-
-# 2. Build and start full-stack containers
 docker compose up --build -d
-
-# 3. Verify backend container health check
 curl http://localhost:8000/health
-# Returns: {"status": "online"}
 ```
 
-Open [http://localhost:3000](http://localhost:3000) for the Next.js frontend and [http://localhost:8000/docs](http://localhost:8000/docs) for the FastAPI Swagger API documentation.
-
----
-
-## 🧪 Testing & Verification
-
-The backend includes tests for authentication, configuration, PDF ingestion, RAG streaming, and router endpoints. Run them in your configured environment; no passing count is claimed here without a current test run. Frontend automated tests are not included yet.
+## Check the project
 
 ```bash
-cd backend
-python -m pytest tests/ -v
+cd backend && python -m pytest tests/
+cd ../frontend && npm run build
 ```
-
----
-
-## 📄 License
-
-MIT License.
